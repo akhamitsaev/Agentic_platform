@@ -1,0 +1,158 @@
+services:
+  postgres:
+    image: postgres:15
+    container_name: agent-postgres
+    environment:
+      POSTGRES_USER: agent
+      POSTGRES_PASSWORD: agentpass
+      POSTGRES_DB: agent_platform
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U agent"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.91.0
+    container_name: otel-collector
+    command: ["--config=/etc/otel-collector-config.yaml"]
+    volumes:
+      - ./otel-collector-config.yaml:/etc/otel-collector-config.yaml
+    ports:
+      - "4317:4317"
+      - "8889:8889"
+    depends_on:
+      - postgres
+
+  prometheus:
+    image: prom/prometheus:v2.47.2
+    container_name: prometheus
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+    ports:
+      - "9090:9090"
+    depends_on:
+      - otel-collector
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:latest
+    container_name: cadvisor
+    ports:
+      - "8080:8080"
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    privileged: true
+    devices:
+      - /dev/kmsg
+
+  grafana:
+    image: grafana/grafana:10.1.5
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_INSTALL_PLUGINS=grafana-piechart-panel
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning
+    depends_on:
+      - prometheus
+
+  mlflow:
+    build: ./mlflow
+    container_name: mlflow
+    ports:
+      - "5000:5000"
+    environment:
+      - MLFLOW_TRACKING_URI=postgresql://agent:agentpass@postgres:5432/agent_platform
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  agent-registry:
+    build: ./agent-registry
+    container_name: agent-registry
+    ports:
+      - "8001:8001"
+    environment:
+      - DATABASE_URL=postgresql://agent:agentpass@postgres:5432/agent_platform
+      - MLFLOW_TRACKING_URI=http://mlflow:5000
+      - LLM_PROXY_URL=http://llm-proxy:8000
+      - MASTER_TOKEN=${MASTER_TOKEN:-master-secret-token-2026}
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  provider-registry:
+    build: ./provider-registry
+    container_name: provider-registry
+    ports:
+      - "8002:8002"
+    environment:
+      - DATABASE_URL=postgresql://agent:agentpass@postgres:5432/agent_platform
+      - MASTER_TOKEN=${MASTER_TOKEN:-master-secret-token-2026}
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  llm-proxy:
+    build: ./llm-proxy
+    container_name: llm-proxy
+    ports:
+      - "8000:8000"
+    environment:
+      - PROVIDER_REGISTRY_URL=http://provider-registry:8002
+      - BALANCER_STRATEGY=${BALANCER_STRATEGY:-latency}
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
+      - MLFLOW_TRACKING_URI=http://mlflow:5000
+      - MASTER_TOKEN=${MASTER_TOKEN:-master-secret-token-2026}
+    depends_on:
+      - provider-registry
+      - otel-collector
+      - mlflow
+
+  poet-agent:
+    build: ./demo-agents/poet_agent
+    container_name: poet-agent
+    ports:
+      - "8010:8001"
+    environment:
+      - LLM_PROXY_URL=http://llm-proxy:8000
+      - AGENT_TOKEN=${POET_AGENT_TOKEN:-poet-agent-token}
+    depends_on:
+      - llm-proxy
+
+  literary-translator:
+    build: ./demo-agents/literary_translator
+    container_name: literary-translator
+    ports:
+      - "8011:8002"
+    environment:
+      - LLM_PROXY_URL=http://llm-proxy:8000
+      - AGENT_TOKEN=${TRANSLATOR_AGENT_TOKEN:-translator-agent-token}
+    depends_on:
+      - llm-proxy
+
+  orchestrator-agent:
+    build: ./demo-agents/orchestrator_agent
+    container_name: orchestrator-agent
+    ports:
+      - "8012:8003"
+    environment:
+      - LLM_PROXY_URL=http://llm-proxy:8000
+      - AGENT_TOKEN=${ORCHESTRATOR_AGENT_TOKEN:-orchestrator-agent-token}
+    depends_on:
+      - llm-proxy
+      - poet-agent
+      - literary-translator
+
+volumes:
+  postgres_data:

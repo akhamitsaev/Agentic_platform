@@ -1,0 +1,62 @@
+# ========== Окружение ==========
+.env
+.env.local
+.env.*.local
+
+# ========== Python ==========
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+*.egg-info/
+dist/
+build/
+*.egg
+
+# ========== Docker ==========
+docker-compose.override.yml
+*.log
+
+# ========== Базы данных ==========
+*.db
+*.sqlite
+*.sqlite3
+postgres_data/
+
+# ========== MLflow ==========
+mlruns/
+mlflow/artifacts/
+
+# ========== IDE ==========
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# ========== Логи ==========
+logs/
+*.log
+response.txt
+response_sample.txt
+
+# ========== Тестовые файлы ==========
+test_*.py
+*_test.py
+request.json
+temp/
+tmp/
+
+# ========== Ключи и секреты ==========
+*.pem
+*.key
+*.crt
+secrets/

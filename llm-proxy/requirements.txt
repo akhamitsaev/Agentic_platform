@@ -1,0 +1,10 @@
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+httpx==0.25.1
+pydantic==2.5.0
+opentelemetry-instrumentation-fastapi==0.42b0
+opentelemetry-exporter-otlp==1.21.0
+opentelemetry-sdk==1.21.0
+prometheus-fastapi-instrumentator==6.1.0
+mlflow==2.8.1
+numpy==1.26.2
